@@ -407,8 +407,8 @@
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  // Адрес API бота на Railway — обновится после деплоя
-  const API_URL = "https://YOUR-RAILWAY-APP.up.railway.app/api/budget";
+  // Адрес API бота на Railway
+  const API_URL = "https://worker-production-02c3.up.railway.app/api/budget";
 
   function loadData() {
     fetch(API_URL)
