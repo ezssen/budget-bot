@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Бюджет</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0c0d10;
+      --surface: #16181c;
+      --surface-2: #1e2126;
+      --border: #25282e;
+      --text: #f2f3f5;
+      --text-dim: #8b8f98;
+      --text-faint: #565a62;
+      --accent: #5ee6a8;
+      --accent-dim: #1f3d30;
+      --warn: #ffb454;
+      --warn-dim: #3d3320;
+      --danger: #ff6b6b;
+      --danger-dim: #3d2222;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px 16px 32px;
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 4px;
+    }
+
+    /* ---- HERO: сегодняшний остаток ---- */
+    .hero {
+      background: linear-gradient(160deg, var(--surface-2), var(--surface));
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px 20px;
+      margin-bottom: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-label {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+
+    .hero-amount {
+      font-size: 40px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+
+    .hero-amount .currency {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-left: 4px;
+    }
+
+    .hero-sub {
+      display: flex;
+      gap: 16px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .hero-sub-item { flex: 1; }
+
+    .hero-sub-label {
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-bottom: 2px;
+    }
+
+    .hero-sub-value {
+      font-size: 15px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---- Progress bar цикла ---- */
+    .cycle-bar-wrap {
+      margin-bottom: 16px;
+    }
+
+    .cycle-bar-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+
+    .cycle-bar-track {
+      height: 6px;
+      background: var(--surface-2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .cycle-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+
+    /* ---- Карточки бюджета ---- */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+    }
+
+    .card-label {
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .card-value {
+      font-size: 17px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .card-value.accent { color: var(--accent); }
+    .card-value.warn { color: var(--warn); }
+
+    /* ---- Секция: категории ---- */
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 22px 0 10px;
+      color: var(--text);
+    }
+
+    .cat-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cat-row:last-child { border-bottom: none; }
+
+    .cat-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .cat-name {
+      flex: 1;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    .cat-amount {
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cat-bar-track {
+      width: 100%;
+      height: 4px;
+      background: var(--surface-2);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .cat-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+    }
+
+    .cat-col { flex: 1; }
+
+    /* ---- Список трат ---- */
+    .expense-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .expense-row:last-child { border-bottom: none; }
+
+    .expense-note {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .expense-cat {
+      color: var(--text-faint);
+      font-size: 11px;
+      margin-top: 2px;
+    }
+
+    .expense-amount {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--text-faint);
+      padding: 30px 20px;
+      font-size: 13px;
+    }
+
+    .refresh-hint {
+      text-align: center;
+      color: var(--text-faint);
+      font-size: 11px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="eyebrow">Бюджет цикла</div>
+
+  <div class="hero">
+    <div class="hero-label" id="heroLabel">Остаток на сегодня</div>
+    <div class="hero-amount" id="heroAmount">— <span class="currency">₸</span></div>
+    <div class="hero-sub">
+      <div class="hero-sub-item">
+        <div class="hero-sub-label">Дневной лимит</div>
+        <div class="hero-sub-value" id="dailyLimitValue">—</div>
+      </div>
+      <div class="hero-sub-item">
+        <div class="hero-sub-label">Дней осталось</div>
+        <div class="hero-sub-value" id="daysLeftValue">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cycle-bar-wrap">
+    <div class="cycle-bar-top">
+      <span id="cycleLabel">Цикл: —</span>
+      <span id="cyclePercent">—%</span>
+    </div>
+    <div class="cycle-bar-track">
+      <div class="cycle-bar-fill" id="cycleBarFill" style="width: 0%;"></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-label">Доход</div>
+      <div class="card-value" id="incomeValue">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Накопления</div>
+      <div class="card-value accent" id="savingsValue">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Обязательные</div>
+      <div class="card-value warn" id="obligationsValue">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Доступно на жизнь</div>
+      <div class="card-value" id="availableValue">—</div>
+    </div>
+  </div>
+
+  <div class="section-title">По категориям</div>
+  <div class="card" id="categoriesCard">
+    <div class="empty-state" id="categoriesEmpty">Пока нет трат в этом цикле</div>
+  </div>
+
+  <div class="section-title">Последние траты</div>
+  <div class="card" id="expensesCard">
+    <div class="empty-state" id="expensesEmpty">Пока нет трат</div>
+  </div>
+
+  <div class="refresh-hint">Обновляется при открытии трекера</div>
+
+<script>
+  const tg = window.Telegram?.WebApp;
+  try { if (tg) { tg.ready(); tg.expand(); } } catch(e) {}
+
+  function fmt(n) {
+    return Math.round(n).toLocaleString('ru-RU').replace(/,/g, ' ');
+  }
+
+  const CATEGORY_COLORS = {
+    "Еда": "#5ee6a8",
+    "Транспорт": "#5eb3e6",
+    "Дом": "#c9a4f5",
+    "Семья": "#ffb454",
+    "Личное": "#ff8fa3",
+    "Незапланированное": "#8b8f98",
+  };
+
+  // Заглушка с примером данных — реальные данные подключим через бот-бэкенд
+  // (бот пишет сюда актуальный JSON при каждом открытии через initData/Cloud)
+  function getDemoData() {
+    return null; // данные подгружаются из CloudStorage ниже
+  }
+
+  function render(d) {
+    if (!d) {
+      document.getElementById('heroAmount').innerHTML = `0 <span class="currency">₸</span>`;
+      document.getElementById('heroLabel').textContent = 'Бюджет не настроен';
+      document.getElementById('dailyLimitValue').textContent = '—';
+      document.getElementById('daysLeftValue').textContent = '—';
+      document.getElementById('cycleLabel').textContent = 'Напиши /setup боту';
+      document.getElementById('cyclePercent').textContent = '';
+      return;
+    }
+
+    const remainingToday = Math.max(d.daily_limit - d.spent_today, 0);
+    document.getElementById('heroAmount').innerHTML = `${fmt(remainingToday)} <span class="currency">₸</span>`;
+    document.getElementById('dailyLimitValue').textContent = fmt(d.daily_limit) + ' ₸';
+    document.getElementById('daysLeftValue').textContent = d.remaining_days + ' дн.';
+
+    document.getElementById('cycleLabel').textContent = `${d.cycle_start} → ${d.cycle_end}`;
+    const pct = Math.min(100, Math.round((d.days_passed / d.days_total) * 100));
+    document.getElementById('cyclePercent').textContent = pct + '%';
+    document.getElementById('cycleBarFill').style.width = pct + '%';
+
+    document.getElementById('incomeValue').textContent = fmt(d.income) + ' ₸';
+    document.getElementById('savingsValue').textContent = fmt(d.savings) + ' ₸';
+    document.getElementById('obligationsValue').textContent = fmt(d.obligations) + ' ₸';
+    document.getElementById('availableValue').textContent = fmt(d.available) + ' ₸';
+
+    // Категории
+    const catCard = document.getElementById('categoriesCard');
+    const cats = d.categories || {};
+    const catEntries = Object.entries(cats).filter(([_, v]) => v > 0).sort((a,b) => b[1]-a[1]);
+
+    if (catEntries.length === 0) {
+      catCard.innerHTML = '<div class="empty-state">Пока нет трат в этом цикле</div>';
+    } else {
+      const maxVal = Math.max(...catEntries.map(([_,v]) => v));
+      catCard.innerHTML = catEntries.map(([name, val]) => {
+        const color = CATEGORY_COLORS[name] || '#8b8f98';
+        const barPct = Math.round((val / maxVal) * 100);
+        return `
+          <div class="cat-row">
+            <div class="cat-col">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span class="cat-name">${name}</span>
+                <span class="cat-amount">${fmt(val)} ₸</span>
+              </div>
+              <div class="cat-bar-track">
+                <div class="cat-bar-fill" style="width:${barPct}%; background:${color};"></div>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // Последние траты
+    const expCard = document.getElementById('expensesCard');
+    const expenses = (d.recent_expenses || []).slice(0, 10);
+
+    if (expenses.length === 0) {
+      expCard.innerHTML = '<div class="empty-state">Пока нет трат</div>';
+    } else {
+      expCard.innerHTML = expenses.map(e => `
+        <div class="expense-row">
+          <div>
+            <div class="expense-note">${escHtml(e.note)}</div>
+            <div class="expense-cat">${escHtml(e.category)} · ${e.date}</div>
+          </div>
+          <div class="expense-amount">${fmt(e.amount)} ₸</div>
+        </div>`).join('');
+    }
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Адрес API бота на Railway — обновится после деплоя
+  const API_URL = "https://YOUR-RAILWAY-APP.up.railway.app/api/budget";
+
+  function loadData() {
+    fetch(API_URL)
+      .then(res => res.json())
+      .then(d => render(d))
+      .catch(err => {
+        console.error('Failed to load budget data', err);
+        render(null);
+      });
+  }
+
+  loadData();
+</script>
+</body>
+</html>
