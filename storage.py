@@ -7,6 +7,7 @@ DATA_FILE = os.path.join(os.path.dirname(__file__), "budget_data.json")
 DEFAULT_DATA = {
     "cycles": {},      # key: "2026-06-10" (cycle start date) -> cycle data
     "current_cycle": None,  # cycle start date string, e.g. "2026-06-10"
+    "wishlist_fund": 0,  # накопленный фонд желаний (растёт между циклами)
 }
 
 CATEGORY_KEYWORDS = {
@@ -28,7 +29,10 @@ def load_data():
     if not os.path.exists(DATA_FILE):
         return json.loads(json.dumps(DEFAULT_DATA))
     with open(DATA_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    if "wishlist_fund" not in data:
+        data["wishlist_fund"] = 0
+    return data
 
 
 def save_data(data):
@@ -94,6 +98,10 @@ def get_or_create_cycle(data, cycle_start=None):
             "obligations": prev_obligations,  # list of {name, amount}
             "days_by_date": {},  # "2026-06-15" -> {"expenses": [...]}
             "setup_complete": False,
+            "bonus_applied": False,
+            "bonus_amount": None,       # сколько всего сэкономлено (если применён бонус)
+            "bonus_to_savings": None,   # 80% часть
+            "bonus_to_wishlist": None,  # 20% часть
         }
         data["current_cycle"] = key
         save_data(data)
@@ -172,3 +180,54 @@ def calc_daily_limit(cycle, cycle_start, today=None):
 
     daily_limit = remaining_budget / remaining_days
     return daily_limit, remaining_budget, remaining_days
+
+
+def is_cycle_finished(cycle_start, today=None):
+    """Цикл считается завершённым, когда наступило 10 число следующего месяца (день после cycle_end)."""
+    if today is None:
+        today = date.today()
+    cycle_end = get_cycle_end(cycle_start)
+    return today > cycle_end
+
+
+def maybe_apply_savings_bonus(data, cycle_start):
+    """Если цикл завершён и бонус ещё не начислен — считает остаток и делит его 80/20.
+    80% фиксируется как 'ушло в накопления' (информационно), 20% добавляется в фонд желаний.
+    Возвращает (bonus_applied_now: bool, cycle) — bonus_applied_now=True только если применили именно сейчас.
+    """
+    cycle = get_or_create_cycle(data, cycle_start)
+
+    if not cycle.get("setup_complete"):
+        return False, cycle
+
+    if cycle.get("bonus_applied"):
+        return False, cycle
+
+    if not is_cycle_finished(cycle_start):
+        return False, cycle
+
+    avail = available_for_life(cycle)
+    spent_total = spent_so_far(cycle)
+    leftover = avail - spent_total
+
+    if leftover <= 0:
+        # Нечего распределять — но всё равно помечаем цикл как обработанный
+        cycle["bonus_applied"] = True
+        cycle["bonus_amount"] = 0
+        cycle["bonus_to_savings"] = 0
+        cycle["bonus_to_wishlist"] = 0
+        save_data(data)
+        return True, cycle
+
+    to_savings = round(leftover * 0.8)
+    to_wishlist = leftover - to_savings  # остаток, чтобы избежать ошибок округления
+
+    cycle["bonus_applied"] = True
+    cycle["bonus_amount"] = leftover
+    cycle["bonus_to_savings"] = to_savings
+    cycle["bonus_to_wishlist"] = to_wishlist
+
+    data["wishlist_fund"] = data.get("wishlist_fund", 0) + to_wishlist
+    save_data(data)
+
+    return True, cycle
