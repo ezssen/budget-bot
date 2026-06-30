@@ -30,6 +30,25 @@ def fmt(amount):
     return f"{amount:,.0f}".replace(",", " ")
 
 
+def check_and_apply_bonus(data):
+    """Проверяет ВСЕ завершённые циклы без начисленного бонуса и применяет его.
+    Возвращает текст уведомления (или None, если применять было нечего)."""
+    messages = []
+    for key in sorted(data.get("cycles", {}).keys()):
+        cycle_start = date.fromisoformat(key)
+        applied_now, cycle = storage.maybe_apply_savings_bonus(data, cycle_start)
+        if applied_now and cycle.get("bonus_amount", 0) > 0:
+            cycle_end = storage.get_cycle_end(cycle_start)
+            messages.append(
+                f"🎉 Цикл {cycle_start.strftime('%d.%m')} → {cycle_end.strftime('%d.%m')} завершён!\n\n"
+                f"Сэкономлено: {fmt(cycle['bonus_amount'])} ₸\n"
+                f"→ Накопления: {fmt(cycle['bonus_to_savings'])} ₸\n"
+                f"→ Фонд желаний: {fmt(cycle['bonus_to_wishlist'])} ₸\n\n"
+                f"Фонд желаний теперь: {fmt(data['wishlist_fund'])} ₸ 💛"
+            )
+    return "\n\n".join(messages) if messages else None
+
+
 def main_menu_keyboard():
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(text="📊 Открыть бюджет", web_app=WebAppInfo(url=WEBAPP_URL))]
@@ -40,6 +59,11 @@ def main_menu_keyboard():
 # ---------- /start ----------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    data = storage.load_data()
+    bonus_msg = check_and_apply_bonus(data)
+    if bonus_msg:
+        await update.message.reply_text(bonus_msg)
+
     await update.message.reply_text(
         "💰",
         reply_markup=main_menu_keyboard()
@@ -226,6 +250,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     data = storage.load_data()
+
+    bonus_msg = check_and_apply_bonus(data)
+    if bonus_msg:
+        await update.message.reply_text(bonus_msg)
+
     cycle_start = storage.get_cycle_start()
     cycle = storage.get_or_create_cycle(data, cycle_start)
 
@@ -264,6 +293,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = storage.load_data()
+
+    bonus_msg = check_and_apply_bonus(data)
+    if bonus_msg:
+        await update.message.reply_text(bonus_msg)
+
     cycle_start = storage.get_cycle_start()
     cycle = storage.get_or_create_cycle(data, cycle_start)
 
@@ -274,6 +308,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     avail = storage.available_for_life(cycle)
     spent_total = storage.spent_so_far(cycle)
     daily_limit, remaining_budget, remaining_days = storage.calc_daily_limit(cycle, cycle_start)
+    wishlist_fund = data.get("wishlist_fund", 0)
 
     reply = (
         f"📊 Текущий бюджет\n\n"
@@ -281,7 +316,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Потрачено: {fmt(spent_total)} ₸\n"
         f"Остаток: {fmt(max(remaining_budget, 0))} ₸\n\n"
         f"Осталось дней: {remaining_days}\n"
-        f"Дневной лимит: {fmt(daily_limit)} ₸"
+        f"Дневной лимит: {fmt(daily_limit)} ₸\n\n"
+        f"💛 Фонд желаний: {fmt(wishlist_fund)} ₸"
     )
     await update.message.reply_text(reply, reply_markup=main_menu_keyboard())
 
@@ -289,6 +325,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def build_snapshot():
     """Собирает данные текущего цикла в формат для Mini App."""
     data = storage.load_data()
+    check_and_apply_bonus(data)  # применяем бонус если предыдущий цикл завершён
+
     cycle_start = storage.get_cycle_start()
     cycle = storage.get_or_create_cycle(data, cycle_start)
     cycle_end = storage.get_cycle_end(cycle_start)
@@ -300,6 +338,7 @@ def build_snapshot():
     daily_limit, remaining_budget, remaining_days = storage.calc_daily_limit(cycle, cycle_start)
     today_str = date.today().isoformat()
     spent_today_val = storage.spent_today(cycle, today_str)
+    spent_total_val = storage.spent_so_far(cycle)
 
     days_total = storage.days_in_cycle(cycle_start)
     days_passed = days_total - remaining_days
@@ -327,6 +366,8 @@ def build_snapshot():
         "available": avail,
         "daily_limit": daily_limit,
         "spent_today": spent_today_val,
+        "spent_total": spent_total_val,
+        "remaining_budget": remaining_budget,
         "remaining_days": remaining_days,
         "days_total": days_total,
         "days_passed": days_passed,
@@ -334,6 +375,7 @@ def build_snapshot():
         "cycle_end": cycle_end.strftime("%d.%m"),
         "categories": categories,
         "recent_expenses": recent_expenses,
+        "wishlist_fund": data.get("wishlist_fund", 0),
     }
 
 
